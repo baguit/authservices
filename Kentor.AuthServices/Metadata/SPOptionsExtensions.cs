@@ -15,9 +15,17 @@ namespace Kentor.AuthServices.Metadata
     {
         public static ExtendedEntityDescriptor CreateMetadata(this ISPOptions spOptions, AuthServicesUrls urls)
         {
+            return spOptions.CreateMetadata(urls, string.Empty);
+        }
+        public static ExtendedEntityDescriptor CreateMetadata(this ISPOptions spOptions, AuthServicesUrls urls, string entityIdSuffix)
+        {
+            var eid = string.IsNullOrEmpty(entityIdSuffix)
+                ? spOptions.EntityId
+                : new EntityId(spOptions.EntityId.Id + entityIdSuffix);
+
             var ed = new ExtendedEntityDescriptor
             {
-                EntityId = spOptions.EntityId,
+                EntityId = eid,
                 Organization = spOptions.Organization,
                 CacheDuration = spOptions.MetadataCacheDuration
             };

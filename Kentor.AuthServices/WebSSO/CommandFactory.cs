@@ -29,6 +29,23 @@ namespace Kentor.AuthServices.WebSso
         /// AuthServices.
         /// </summary>
         public const string MetadataCommand = "";
+        /// <summary>
+        /// The metadata production environment command 
+        /// </summary>
+        public const string MetadataCommandProduction = "metadata";
+        /// <summary>
+        /// The metadata UAT environment command 
+        /// </summary>
+        public const string MetadataCommandUserAcceptanceTest = "metadata/uat";
+        /// <summary>
+        /// The metadata Test environment command 
+        /// </summary>
+        public const string MetadataCommandTest = "metadata/test";
+        /// <summary>
+        /// The metadata QA environment command 
+        /// </summary>
+        public const string MetadataCommandQualityAssurance = "metadata/qa";
+
 
         private static readonly IDictionary<string, ICommand> commands =
         new Dictionary<string, ICommand>(StringComparer.OrdinalIgnoreCase) 
@@ -36,6 +53,10 @@ namespace Kentor.AuthServices.WebSso
             { SignInCommandName, new SignInCommand() },
             { AcsCommandName, new AcsCommand() },
             { MetadataCommand, new MetadataCommand() },
+            { MetadataCommandProduction, new MetadataCommandEx("")},
+            { MetadataCommandUserAcceptanceTest, new MetadataCommandEx("/uat")},
+            { MetadataCommandTest, new MetadataCommandEx("/test")},
+            { MetadataCommandQualityAssurance, new MetadataCommandEx("/qa")}
         };
 
         /// <summary>

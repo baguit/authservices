@@ -30,4 +30,28 @@ namespace Kentor.AuthServices.WebSso
             };
         }
     }
+    class MetadataCommandEx : ICommand
+    {
+        private readonly string _entityIdSuffix;
+        public MetadataCommandEx(string entityIdSuffix)
+        {
+            _entityIdSuffix = entityIdSuffix;
+        }
+
+        public CommandResult Run(HttpRequestData request, IOptions options)
+        {
+            if (options == null)
+            {
+                throw new ArgumentNullException("options");
+            }
+
+            var urls = new AuthServicesUrls(request, options.SPOptions);
+
+            return new CommandResult()
+            {
+                Content = options.SPOptions.CreateMetadata(urls, _entityIdSuffix).ToXmlString(),
+                ContentType = "application/samlmetadata+xml"
+            };
+        }
+    }
 }
