@@ -55,6 +55,13 @@ namespace Kentor.AuthServices.Metadata
                             KeyInfo = new SecurityKeyIdentifier(securityToken.CreateKeyIdentifierClause<X509RawDataKeyIdentifierClause>())
                         }
                     );
+                    spsso.Keys.Add(
+                        new KeyDescriptor
+                        {
+                            Use = KeyType.Signing,
+                            KeyInfo = new SecurityKeyIdentifier(securityToken.CreateKeyIdentifierClause<X509RawDataKeyIdentifierClause>())
+                        }
+                    );
                 }
             }
 

@@ -72,7 +72,7 @@ namespace Kentor.AuthServices.Configuration
         IdentityConfiguration SystemIdentityModelIdentityConfiguration { get; }
 
         /// <summary>
-        /// Certificate for service provider to use when decrypting assertions
+        /// Certificate for service provider to use when decrypting assertions and signing authentication requests
         /// </summary>
         X509Certificate2 ServiceCertificate { get; set; }
     }
