@@ -8,6 +8,7 @@ using System.Xml;
 using System.Xml.Linq;
 using Kentor.AuthServices.Internal;
 using System.Security.Cryptography.X509Certificates;
+using Kentor.AuthServices.Configuration;
 
 namespace Kentor.AuthServices.Saml2P
 {
@@ -66,8 +67,15 @@ namespace Kentor.AuthServices.Saml2P
                 {
                     xmlDocument.Load(xmlReader);
                 }
-
-                xmlDocument.Sign(SigningCertificate);
+                switch (SigningAlgorithm)
+                {
+                    case AuthenticationRequestSigningAlgorithm.Sha1:
+                        xmlDocument.Sign(SigningCertificate);
+                        break;
+                    case AuthenticationRequestSigningAlgorithm.Sha256:
+                        xmlDocument.Sign256(SigningCertificate, false);
+                        break;
+                }
 
                 return xmlDocument.OuterXml;
             }
@@ -118,5 +126,9 @@ namespace Kentor.AuthServices.Saml2P
         /// Certificate used for signing the request.
         /// </summary>
         public X509Certificate2 SigningCertificate { get; set; }
+        /// <summary>
+        /// Algorithm used to sign request
+        /// </summary>
+        public AuthenticationRequestSigningAlgorithm SigningAlgorithm { get; set; }
     }
 }

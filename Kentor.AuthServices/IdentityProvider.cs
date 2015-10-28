@@ -130,6 +130,13 @@ namespace Kentor.AuthServices
             }
         }
 
+        // Default to SHA-256
+        private AuthenticationRequestSigningAlgorithm signingAlgorithm = AuthenticationRequestSigningAlgorithm.Sha256;
+        /// <summary>
+        /// The signing algorithm to be used when issuing a authentication request to this identity provider
+        /// </summary>
+        public AuthenticationRequestSigningAlgorithm SigningAlgorithm { get { return signingAlgorithm; } set { signingAlgorithm = value; } }
+
         private Uri singleSignOnServiceUrl;
 
         /// <summary>
@@ -222,7 +229,8 @@ namespace Kentor.AuthServices
                 // For now we only support one attribute consuming service.
                 AttributeConsumingServiceIndex = spOptions.AttributeConsumingServices.Any() ? 0 : (int?)null,
                 // If a service certificate was set use this for signing AND encryption
-                SigningCertificate = spOptions.ServiceCertificate
+                SigningCertificate = spOptions.ServiceCertificate,
+                SigningAlgorithm = signingAlgorithm
             };
 
             var responseData = new StoredRequestState(EntityId, returnUrl, relayData);

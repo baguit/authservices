@@ -72,5 +72,61 @@ namespace Kentor.AuthServices
                 xmlDocument.ImportNode(signedXml.GetXml(), true),
                 xmlDocument.DocumentElement["Issuer", Saml2Namespaces.Saml2Name]);
         }
+        /// <summary>
+        /// Sign an xml document with the supplied cert. using SHA-256
+        /// </summary>
+        /// <param name="xmlDocument">XmlDocument to be signed. The signature is
+        /// added as a node in the document, right after the Issuer node.</param>
+        /// <param name="cert">Certificate to use when signing.</param>
+        /// <param name="includeKeyInfo">Include public key in signed output.</param>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1059:MembersShouldNotExposeCertainConcreteTypes", MessageId = "System.Xml.XmlNode")]
+        public static void Sign256(this XmlDocument xmlDocument, X509Certificate2 cert, bool includeKeyInfo)
+        {
+            if (xmlDocument == null)
+            {
+                throw new ArgumentNullException("xmlDocument");
+            }
+
+            if (cert == null)
+            {
+                throw new ArgumentNullException("cert");
+            }
+
+
+            // Note that this will return a Basic crypto provider, with only SHA-1 support
+            var key = (RSACryptoServiceProvider)cert.PrivateKey;
+            // Force use of the Enhanced RSA and AES Cryptographic Provider with openssl-generated SHA256 keys
+            using (var cryptoProvider = new RSACryptoServiceProvider())
+            {
+                var enhCsp = cryptoProvider.CspKeyContainerInfo;
+                var cspparams = new CspParameters(enhCsp.ProviderType, enhCsp.ProviderName, key.CspKeyContainerInfo.KeyContainerName);
+                using (key = new RSACryptoServiceProvider(cspparams))
+                {
+
+
+                    var signedXml = new SignedXml(xmlDocument);
+                    signedXml.SigningKey = key;
+                    signedXml.SignedInfo.CanonicalizationMethod = SignedXml.XmlDsigExcC14NTransformUrl;
+                    signedXml.SignedInfo.SignatureMethod = @"http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"; ;
+
+                    var reference = new Reference { Uri = "#" + xmlDocument.DocumentElement.GetAttribute("ID") };
+                    reference.AddTransform(new XmlDsigEnvelopedSignatureTransform());
+                    reference.AddTransform(new XmlDsigExcC14NTransform());
+
+                    if (includeKeyInfo)
+                    {
+                        var keyInfo = new KeyInfo();
+                        keyInfo.AddClause(new KeyInfoX509Data(cert));
+                        signedXml.KeyInfo = keyInfo;
+                    }
+
+                    signedXml.AddReference(reference);
+                    signedXml.ComputeSignature();
+                    xmlDocument.DocumentElement.AppendChild(xmlDocument.ImportNode(signedXml.GetXml(), true));
+                }
+            }
+
+        }
+
     }
 }
