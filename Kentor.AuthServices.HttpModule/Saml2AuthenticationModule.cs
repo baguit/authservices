@@ -28,18 +28,23 @@ namespace Kentor.AuthServices.HttpModule
       {
         throw new ArgumentNullException(nameof(context));
       }
-      context.BeginRequest += OnBeginRequest;
+
+      // Run our code post authentication to allow any session authentication
+      // to be done first (required by logout) but still execute as close
+      // as possible to the normal authentication step.
+      context.PostAuthenticateRequest += OnPostAuthenticateRequest;
 
       // Cache configuration during the lifecycle of this module including metadata, certificates etc. 
       options = Options.FromConfiguration;
     }
 
     /// <summary>
-    /// Begin request handler that captures all traffic to ~/Saml2AuthenticationModule/
+    /// Begin request handler that captures all traffic to configured module
+    /// path.
     /// </summary>
     /// <param name="sender">The http application.</param>
     /// <param name="e">Ignored</param>
-    protected virtual void OnBeginRequest(object sender, EventArgs e)
+    protected void OnPostAuthenticateRequest(object sender, EventArgs e)
     {
       var application = (HttpApplication)sender;
 
@@ -54,27 +59,12 @@ namespace Kentor.AuthServices.HttpModule
         var commandName = appRelativePath.Substring(modulePath.Length);
 
         var command = CommandFactory.GetCommand(commandName);
-        var commandResult = RunCommand(application, command, options);
-
-        commandResult.SignInSessionAuthenticationModule();
-        commandResult.Apply(new HttpResponseWrapper(application.Response));
-      }
-    }
-
-    private static CommandResult RunCommand(HttpApplication application, ICommand command, IOptions options)
-    {
-      try
-      {
-        return command.Run(
+        var commandResult = command.Run(
             new HttpRequestWrapper(application.Request).ToHttpRequestData(),
             options);
-      }
-      catch (AuthServicesException)
-      {
-        return new CommandResult
-        {
-          HttpStatusCode = HttpStatusCode.InternalServerError
-        };
+
+        commandResult.SignInOrOutSessionAuthenticationModule();
+        commandResult.Apply(new HttpResponseWrapper(application.Response));
       }
     }
 

@@ -2,12 +2,14 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
+using Kentor.AuthServices.Configuration;
 using Kentor.AuthServices.Internal;
-using System.Security.Cryptography.X509Certificates;
+using Kentor.AuthServices.WebSso;
 using Kentor.AuthServices.Configuration;
 
 namespace Kentor.AuthServices.Saml2P
@@ -22,7 +24,7 @@ namespace Kentor.AuthServices.Saml2P
         /// </summary>
         public Saml2AuthenticationRequest()
         {
-
+            RelayState = SecureKeyGenerator.CreateRelayState();
         }
 
         /// <summary>
@@ -37,6 +39,7 @@ namespace Kentor.AuthServices.Saml2P
         /// Serializes the request to a Xml message.
         /// </summary>
         /// <returns>XElement</returns>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Globalization", "CA1308:NormalizeStringsToUppercase", Justification = "Lowercase demanded by specification.")]
         public XElement ToXElement()
         {
             var x = new XElement(Saml2Namespaces.Saml2P + LocalName);
@@ -45,7 +48,53 @@ namespace Kentor.AuthServices.Saml2P
             x.AddAttributeIfNotNullOrEmpty("AssertionConsumerServiceURL", AssertionConsumerServiceUrl);
             x.AddAttributeIfNotNullOrEmpty("AttributeConsumingServiceIndex", AttributeConsumingServiceIndex);
 
+            AddNameIdPolicy(x);
+
+            if (RequestedAuthnContext != null && RequestedAuthnContext.ClassRef != null)
+            {
+                x.Add(new XElement(Saml2Namespaces.Saml2P + "RequestedAuthnContext",
+                    new XAttribute("Comparison", RequestedAuthnContext.Comparison.ToString().ToLowerInvariant()),
+
+                    // Add the classref as original string to avoid URL normalization
+                    // and make sure the emitted value is exactly the configured.
+                    new XElement(Saml2Namespaces.Saml2 + "AuthnContextClassRef",
+                        RequestedAuthnContext.ClassRef.OriginalString)));
+            }
+            if (ScopeElement != null)
+            {
+                x.Add(ScopeElement);
+            }
             return x;
+        }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA2204:Literals should be spelled correctly", MessageId = "NameIdPolicy")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA2204:Literals should be spelled correctly", MessageId = "AllowCreate")]
+        private void AddNameIdPolicy(XElement xElement)
+        {
+            if (NameIdPolicy != null &&
+                (NameIdPolicy.AllowCreate.HasValue || NameIdPolicy.Format != NameIdFormat.NotConfigured))
+            {
+                if(NameIdPolicy.AllowCreate.HasValue && NameIdPolicy.Format == NameIdFormat.Transient)
+                {
+                    throw new InvalidOperationException("When NameIdPolicy/Format is set to Transient, it is not permitted to specify AllowCreate. Change Format or leave AllowCreate as null.");
+                }
+
+                var nameIdPolicyElement = new XElement(Saml2Namespaces.Saml2P + "NameIDPolicy");
+
+                if (NameIdPolicy.Format != NameIdFormat.NotConfigured)
+                {
+                    nameIdPolicyElement.Add(new XAttribute("Format",
+                        NameIdPolicy.Format.GetString()));
+                }
+
+                if (NameIdPolicy.AllowCreate.HasValue)
+                {
+                    nameIdPolicyElement.Add(new XAttribute("AllowCreate",
+                        NameIdPolicy.AllowCreate));
+                }
+
+                xElement.Add(nameIdPolicyElement);
+            }
         }
 
         /// <summary>
@@ -85,9 +134,10 @@ namespace Kentor.AuthServices.Saml2P
         /// Read the supplied Xml and parse it into a authenticationrequest.
         /// </summary>
         /// <param name="xml">xml data.</param>
+        /// <param name="relayState">Relay State attached to the message or null if not present.</param>
         /// <returns>Saml2Request</returns>
         /// <exception cref="XmlException">On xml errors or unexpected xml structure.</exception>
-        public static Saml2AuthenticationRequest Read(string xml)
+        public static Saml2AuthenticationRequest Read(string xml, string relayState)
         {
             if (xml == null)
             {
@@ -97,18 +147,46 @@ namespace Kentor.AuthServices.Saml2P
             x.PreserveWhitespace = true;
             x.LoadXml(xml);
 
-            return new Saml2AuthenticationRequest(x);
+            return new Saml2AuthenticationRequest(x.DocumentElement, relayState);
         }
 
-        private Saml2AuthenticationRequest(XmlDocument xml)
+        /// <summary>
+        /// Ctor
+        /// </summary>
+        /// <param name="xml">Xml data</param>
+        /// <param name="relayState">RelayState associateed with the message.</param>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA1806:DoNotIgnoreMethodResults", MessageId = "System.Enum.TryParse<Kentor.AuthServices.Saml2P.NameIdFormat>(System.String,System.Boolean,Kentor.AuthServices.Saml2P.NameIdFormat@)")]
+        public Saml2AuthenticationRequest(XmlElement xml, string relayState)
         {
             ReadBaseProperties(xml);
+            RelayState = relayState;
 
-            var AssertionConsumerServiceUriString = xml.DocumentElement.Attributes["AssertionConsumerServiceURL"].GetValueIfNotNull();
+            var AssertionConsumerServiceUriString = xml.Attributes["AssertionConsumerServiceURL"].GetValueIfNotNull();
 
             if (AssertionConsumerServiceUriString != null)
             {
                 AssertionConsumerServiceUrl = new Uri(AssertionConsumerServiceUriString);
+            }
+
+            var node = xml["NameIDPolicy", Saml2Namespaces.Saml2PName];
+            if (node != null)
+            {
+                var fullFormat = node.Attributes["Format"].GetValueIfNotNull();
+                var format = fullFormat?.Split(':').LastOrDefault();
+                NameIdFormat nameIdFormat = NameIdFormat.NotConfigured;
+                if (format != null)
+                {
+                    Enum.TryParse(format, true, out nameIdFormat);
+                }
+
+                bool? allowCreate = null;
+                var allowCreateStr = node.Attributes["AllowCreate"].GetValueIfNotNull();
+                if (allowCreateStr != null)
+                {
+                    allowCreate = bool.Parse(allowCreateStr);
+                }
+
+                NameIdPolicy =  new Saml2NameIdPolicy(allowCreate, nameIdFormat);
             }
         }
 
@@ -130,5 +208,19 @@ namespace Kentor.AuthServices.Saml2P
         /// Algorithm used to sign request
         /// </summary>
         public AuthenticationRequestSigningAlgorithm SigningAlgorithm { get; set; }
+        /// <summary>
+        /// Scope element for request
+        /// </summary>
+        public XElement ScopeElement { get; set; }
+
+        /// <summary>
+        /// NameId policy.
+        /// </summary>
+        public Saml2NameIdPolicy NameIdPolicy { get; set; }
+
+        /// <summary>
+        /// RequestedAuthnContext.
+        /// </summary>
+        public Saml2RequestedAuthnContext RequestedAuthnContext { get; set; }
     }
 }

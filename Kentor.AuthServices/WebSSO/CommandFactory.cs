@@ -25,6 +25,12 @@ namespace Kentor.AuthServices.WebSso
         public const string SignInCommandName = "SignIn";
 
         /// <summary>
+        /// The name of the Log Out Command.
+        /// </summary>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1726:UsePreferredTerms", MessageId = "Logout")]
+        public const string LogoutCommandName = "Logout";
+
+        /// <summary>
         /// The metadata command has no name - it is triggered at base url for
         /// AuthServices.
         /// </summary>
@@ -53,6 +59,7 @@ namespace Kentor.AuthServices.WebSso
             { SignInCommandName, new SignInCommand() },
             { AcsCommandName, new AcsCommand() },
             { MetadataCommand, new MetadataCommand() },
+            { LogoutCommandName, new LogoutCommand() },
             { MetadataCommandProduction, new MetadataCommandEx("")},
             { MetadataCommandUserAcceptanceTest, new MetadataCommandEx("/uat")},
             { MetadataCommandTest, new MetadataCommandEx("/test")},

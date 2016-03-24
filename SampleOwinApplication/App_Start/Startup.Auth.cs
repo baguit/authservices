@@ -15,6 +15,8 @@ using Kentor.AuthServices;
 using Kentor.AuthServices.WebSso;
 using System.Security.Cryptography.X509Certificates;
 using System.Web.Hosting;
+using System.IdentityModel.Selectors;
+using System.IdentityModel.Tokens;
 
 namespace SampleOwinApplication
 {
@@ -64,16 +66,17 @@ namespace SampleOwinApplication
                     SingleSignOnServiceUrl = new Uri("http://stubidp.kentor.se")
                 };
 
-            idp.SigningKeys.AddConfiguredItem(
-                new X509Certificate2(HostingEnvironment.MapPath("~/App_Data/Kentor.AuthServices.StubIdp.pfx")).PublicKey
-                                                                                                              .Key);
+            idp.SigningKeys.AddConfiguredKey(
+                new X509Certificate2(
+                    HostingEnvironment.MapPath(
+                        "~/App_Data/Kentor.AuthServices.StubIdp.cer")));
 
             authServicesOptions.IdentityProviders.Add(idp);
 
             // It's enough to just create the federation and associate it
             // with the options. The federation will load the metadata and
             // update the options with any identity providers found.
-            new Federation(new Uri("http://localhost:52071/Federation"), true, authServicesOptions);
+            new Federation("http://localhost:52071/Federation", true, authServicesOptions);
 
             return authServicesOptions;
         }
@@ -126,6 +129,9 @@ namespace SampleOwinApplication
                 new RequestedAttribute("Minimal"));
 
             spOptions.AttributeConsumingServices.Add(attributeConsumingService);
+
+            spOptions.ServiceCertificates.Add(new X509Certificate2(
+                AppDomain.CurrentDomain.SetupInformation.ApplicationBase + "/App_Data/Kentor.AuthServices.Tests.pfx"));
 
             return spOptions;
         }

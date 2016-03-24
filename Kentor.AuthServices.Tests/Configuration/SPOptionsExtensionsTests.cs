@@ -11,7 +11,7 @@ using Kentor.AuthServices.Configuration;
 using System.Globalization;
 using Kentor.AuthServices.Metadata;
 using Kentor.AuthServices.WebSso;
-using Kentor.AuthServices.TestHelpers;
+using Kentor.AuthServices.Tests.Helpers;
 
 namespace Kentor.AuthServices.Tests.Configuration
 {
@@ -36,18 +36,48 @@ namespace Kentor.AuthServices.Tests.Configuration
             acs.IsDefault.Should().HaveValue();
             acs.Binding.ToString().Should().Be("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST");
             acs.Location.ToString().Should().Be("http://localhost/AuthServices/Acs");
+
+            // No service certificate configured, so no SLO endpoint should be
+            // exposed in metadata.
+            spMetadata.SingleLogoutServices.Should().BeEmpty();
         }
 
         [TestMethod]
-        public void SPOPtionsExtensions_CreateMetadata_ServiceCertificate()
+        public void SPOptionsExtensions_CreateMetadata_WithServiceCertificateConfigured()
         {
-            var options = Options.FromConfiguration;
-            options.SPOptions.ServiceCertificate = SignedXmlHelper.TestCert2;
+            var options = StubFactory.CreateOptions();
+            options.SPOptions.ServiceCertificates.Add(new ServiceCertificate { Certificate = SignedXmlHelper.TestCert2 });
             var metadata = options.SPOptions.CreateMetadata(StubFactory.CreateAuthServicesUrls());
 
             var spMetadata = metadata.RoleDescriptors.OfType<ServiceProviderSingleSignOnDescriptor>().Single();
             spMetadata.Should().NotBeNull();
             spMetadata.Keys.Count.Should().Be(1);
+            spMetadata.Keys.Single().Use.Should().Be(KeyType.Unspecified);
+
+            // When there is a service certificate, expose SLO endpoints.
+            var sloRedirect = spMetadata.SingleLogoutServices.Single(
+                slo => slo.Binding == Saml2Binding.HttpRedirectUri);
+            sloRedirect.Location.Should().Be("http://localhost/AuthServices/Logout");
+            sloRedirect.ResponseLocation.Should().BeNull();
+            var sloPost = spMetadata.SingleLogoutServices.Single(
+                slo => slo.Binding == Saml2Binding.HttpPostUri);
+            sloPost.Location.Should().Be("http://localhost/AuthServices/Logout");
+            sloPost.ResponseLocation.Should().BeNull();
+        }
+
+        [TestMethod]
+        public void SPOptionsExtensions_CreateMetadata_MultipleServiceCertificate()
+        {
+            var options = StubFactory.CreateOptions();
+            options.SPOptions.ServiceCertificates.Add(new ServiceCertificate { Certificate = SignedXmlHelper.TestCert2, Use = CertificateUse.Encryption });
+            options.SPOptions.ServiceCertificates.Add(new ServiceCertificate { Certificate = SignedXmlHelper.TestCert2, Use = CertificateUse.Signing });
+            var metadata = options.SPOptions.CreateMetadata(StubFactory.CreateAuthServicesUrls());
+
+            var spMetadata = metadata.RoleDescriptors.OfType<ServiceProviderSingleSignOnDescriptor>().Single();
+            spMetadata.Should().NotBeNull();
+            spMetadata.Keys.Count.Should().Be(2);
+            spMetadata.Keys.Where(k => k.Use == KeyType.Encryption).Count().Should().Be(1);
+            spMetadata.Keys.Where(k => k.Use == KeyType.Signing).Count().Should().Be(1);
         }
 
         [TestMethod]

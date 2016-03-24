@@ -1,0 +1,50 @@
+﻿@{
+    ViewBag.Title = "Home Page";
+}
+
+<h1>Sample Saml2 Owin Authentication Application</h1>
+<p>
+    This is a sample Owin application for Saml2 authentication using the MVC Owin Middleware with ASP.NET Identity.
+</p>
+
+@if (!User.Identity.IsAuthenticated)
+{
+    <p>
+<<<<<<< .merge_file_a15800
+        You are currently not signed in.
+=======
+        You are currently <span id="status">not signed in</span>.
+>>>>>>> .merge_file_a21332
+    </p>
+}
+else
+{
+    <p>
+<<<<<<< .merge_file_a15800
+        You are signed in.
+=======
+        You are <span id="status">signed in</span>.
+>>>>>>> .merge_file_a21332
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Claim Type</th>
+                <th>Claim Value</th>
+                <th>Issuer</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in System.Security.Claims.ClaimsPrincipal.Current.Claims)
+            {
+                <tr>
+                    <td>@c.Type</td>
+                    <td>@c.Value</td>
+                    <td>@c.Issuer</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<a href="@Url.Content("~/AuthServices")">Service Provider Metadata</a>

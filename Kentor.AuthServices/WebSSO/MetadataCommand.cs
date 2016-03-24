@@ -25,7 +25,8 @@ namespace Kentor.AuthServices.WebSso
 
             return new CommandResult()
             {
-                Content = options.SPOptions.CreateMetadata(urls).ToXmlString(),
+                Content = options.SPOptions.CreateMetadata(urls)
+                    .ToXmlString(options.SPOptions.SigningServiceCertificate),
                 ContentType = "application/samlmetadata+xml"
             };
         }
@@ -49,7 +50,7 @@ namespace Kentor.AuthServices.WebSso
 
             return new CommandResult()
             {
-                Content = options.SPOptions.CreateMetadata(urls, _entityIdSuffix).ToXmlString(),
+                Content = options.SPOptions.CreateMetadata(urls, _entityIdSuffix).ToXmlString(options.SPOptions.SigningServiceCertificate),
                 ContentType = "application/samlmetadata+xml"
             };
         }
