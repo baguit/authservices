@@ -150,9 +150,9 @@ namespace Kentor.AuthServices
         public AuthenticationRequestSigningAlgorithm SigningAlgorithm { get { return signingAlgorithm; } set { signingAlgorithm = value; } }
 
         /// <summary>
-        /// Scope element for request
+        /// Scope element for every authentication request to this particular IdP
         /// </summary>
-        public XElement ScopeElement { get; set; }
+        public Saml2Scoping Scoping { get; set; }
 
         private Uri singleSignOnServiceUrl;
 
@@ -305,7 +305,7 @@ namespace Kentor.AuthServices
                 NameIdPolicy = spOptions.NameIdPolicy,
                 RequestedAuthnContext = spOptions.RequestedAuthnContext,
                 SigningAlgorithm = signingAlgorithm,
-                ScopeElement = ScopeElement
+                Scoping = Scoping
             };
 
             if (spOptions.AuthenticateRequestSigningBehavior == SigningBehavior.Always

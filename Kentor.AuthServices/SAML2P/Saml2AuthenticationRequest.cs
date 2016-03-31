@@ -60,11 +60,18 @@ namespace Kentor.AuthServices.Saml2P
                     new XElement(Saml2Namespaces.Saml2 + "AuthnContextClassRef",
                         RequestedAuthnContext.ClassRef.OriginalString)));
             }
-            if (ScopeElement != null)
-            {
-                x.Add(ScopeElement);
-            }
+
+            AddScoping(x);
+
             return x;
+        }
+
+        private void AddScoping(XElement xElement)
+        {
+            if (Scoping != null)
+            {
+                xElement.Add(Scoping.ToXElement());
+            }
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA2204:Literals should be spelled correctly", MessageId = "NameIdPolicy")]
@@ -209,9 +216,9 @@ namespace Kentor.AuthServices.Saml2P
         /// </summary>
         public AuthenticationRequestSigningAlgorithm SigningAlgorithm { get; set; }
         /// <summary>
-        /// Scope element for request
+        /// Scoping for request
         /// </summary>
-        public XElement ScopeElement { get; set; }
+        public Saml2Scoping Scoping { get; set; }
 
         /// <summary>
         /// NameId policy.
