@@ -17,6 +17,7 @@ using System.Reflection;
 using System.Configuration;
 using Kentor.AuthServices.Exceptions;
 using System.IdentityModel.Metadata;
+using System.IdentityModel.Tokens;
 
 namespace Kentor.AuthServices.Tests.WebSso
 {
@@ -220,7 +221,7 @@ namespace Kentor.AuthServices.Tests.WebSso
             {
                 Principal = new ClaimsPrincipal(ids),
                 HttpStatusCode = HttpStatusCode.SeeOther,
-                Location = new Uri("https://localhost/returnUrl")
+                Location = new Uri("https://localhost/returnUrl"),
             };
 
             var options = StubFactory.CreateOptions();
@@ -233,14 +234,11 @@ namespace Kentor.AuthServices.Tests.WebSso
         public void AcsCommand_Run_WithReturnUrl_SuccessfulResult()
         {
             var idp = Options.FromConfiguration.IdentityProviders.Default;
-            var request = idp.CreateAuthenticateRequest(
-                new Uri("http://localhost/testUrl.aspx"),
-                StubFactory.CreateAuthServicesUrls());
 
             var response =
             @"<saml2p:Response xmlns:saml2p=""urn:oasis:names:tc:SAML:2.0:protocol""
                 xmlns:saml2=""urn:oasis:names:tc:SAML:2.0:assertion""
-                ID = """ + MethodBase.GetCurrentMethod().Name + @""" InResponseTo = """ + request.Id + @""" Version=""2.0"" IssueInstant=""2013-01-01T00:00:00Z"">
+                ID = """ + MethodBase.GetCurrentMethod().Name + @""" InResponseTo = ""InResponseToId"" Version=""2.0"" IssueInstant=""2013-01-01T00:00:00Z"">
                 <saml2:Issuer>
                     https://idp.example.com
                 </saml2:Issuer>
@@ -261,7 +259,7 @@ namespace Kentor.AuthServices.Tests.WebSso
 
             var responseFormValue = Convert.ToBase64String
                 (Encoding.UTF8.GetBytes(SignedXmlHelper.SignXml(response)));
-            var relayStateFormValue = request.RelayState;
+            var relayStateFormValue = "rs1234";
 
             var r = new HttpRequestData(
                 "POST",
@@ -272,8 +270,12 @@ namespace Kentor.AuthServices.Tests.WebSso
                     new KeyValuePair<string, string[]>("SAMLResponse", new string[] { responseFormValue }),
                     new KeyValuePair<string, string[]>("RelayState", new string[] { relayStateFormValue })
                 },
-                Enumerable.Empty<KeyValuePair<string, string>>(),
-                null);
+                new StoredRequestState(
+                    new EntityId("https://idp.example.com"),
+                    new Uri("http://localhost/testUrl.aspx"),
+                    new Saml2Id("InResponseToId"),
+                    null)
+                );
 
             var ids = new ClaimsIdentity[] { new ClaimsIdentity("Federation"), new ClaimsIdentity("ClaimsAuthenticationManager") };
             ids[0].AddClaim(new Claim(ClaimTypes.NameIdentifier, "SomeUser", null, "https://idp.example.com"));
@@ -283,11 +285,66 @@ namespace Kentor.AuthServices.Tests.WebSso
             {
                 Principal = new ClaimsPrincipal(ids),
                 HttpStatusCode = HttpStatusCode.SeeOther,
-                Location = new Uri("http://localhost/testUrl.aspx")
+                Location = new Uri("http://localhost/testUrl.aspx"),
+                ClearCookieName = "Kentor." + relayStateFormValue
             };
 
             new AcsCommand().Run(r, StubFactory.CreateOptions())
                 .ShouldBeEquivalentTo(expected, opt => opt.IgnoringCyclicReferences());
+        }
+
+        [TestMethod]
+        public void AcsCommand_Run_WithReturnUrl_SuccessfulResult_NoConfigReturnUrl()
+        {
+            var idp = Options.FromConfiguration.IdentityProviders.Default;
+
+            var response =
+            @"<saml2p:Response xmlns:saml2p=""urn:oasis:names:tc:SAML:2.0:protocol""
+                xmlns:saml2=""urn:oasis:names:tc:SAML:2.0:assertion""
+                ID = """ + MethodBase.GetCurrentMethod().Name + @""" InResponseTo = ""InResponseToId"" Version=""2.0"" IssueInstant=""2013-01-01T00:00:00Z"">
+                <saml2:Issuer>
+                    https://idp.example.com
+                </saml2:Issuer>
+                <saml2p:Status>
+                    <saml2p:StatusCode Value=""urn:oasis:names:tc:SAML:2.0:status:Success"" />
+                </saml2p:Status>
+                <saml2:Assertion
+                Version=""2.0"" ID=""" + MethodBase.GetCurrentMethod().Name + @"_Assertion2""
+                IssueInstant=""2013-09-25T00:00:00Z"">
+                    <saml2:Issuer>https://idp.example.com</saml2:Issuer>
+                    <saml2:Subject>
+                        <saml2:NameID>SomeUser</saml2:NameID>
+                        <saml2:SubjectConfirmation Method=""urn:oasis:names:tc:SAML:2.0:cm:bearer"" />
+                    </saml2:Subject>
+                    <saml2:Conditions NotOnOrAfter=""2100-01-01T00:00:00Z"" />
+                </saml2:Assertion>
+            </saml2p:Response>";
+
+            var responseFormValue = Convert.ToBase64String
+                (Encoding.UTF8.GetBytes(SignedXmlHelper.SignXml(response)));
+            var relayStateFormValue = "rs1234";
+
+            var r = new HttpRequestData(
+                "POST",
+                new Uri("http://localhost"),
+                "/ModulePath",
+                new KeyValuePair<string, string[]>[]
+                {
+                    new KeyValuePair<string, string[]>("SAMLResponse", new string[] { responseFormValue }),
+                    new KeyValuePair<string, string[]>("RelayState", new string[] { relayStateFormValue })
+                },
+                new StoredRequestState(
+                    new EntityId("https://idp.example.com"),
+                    new Uri("http://localhost/testUrl.aspx"),
+                    new Saml2Id("InResponseToId"),
+                    null)
+                );
+
+            var options = StubFactory.CreateOptions();
+            ((SPOptions)options.SPOptions).ReturnUrl = null;
+
+            new AcsCommand().Invoking(c => c.Run(r, options))
+                .ShouldNotThrow();
         }
 
         [TestMethod]
@@ -333,7 +390,53 @@ namespace Kentor.AuthServices.Tests.WebSso
             ((SPOptions)options.SPOptions).ReturnUrl = null;
 
             new AcsCommand().Invoking(a => a.Run(r, options))
-                .ShouldThrow<ConfigurationErrorsException>().WithMessage(AcsCommand.MissingReturnUrlMessage);
+                .ShouldThrow<ConfigurationErrorsException>().WithMessage(AcsCommand.UnsolicitedMissingReturnUrlMessage);
+        }
+
+        [TestMethod]
+        public void AcsCommand_Run_Response_ThrowsOnNoStoredNorConfiguredReturnUrl()
+        {
+            var response =
+             @"<saml2p:Response xmlns:saml2p=""urn:oasis:names:tc:SAML:2.0:protocol""
+                xmlns:saml2=""urn:oasis:names:tc:SAML:2.0:assertion""
+                ID = """ + MethodBase.GetCurrentMethod().Name + @""" Version=""2.0"" IssueInstant=""2013-01-01T00:00:00Z""
+                InResponseTo=""InResponseToId"">
+                <saml2:Issuer>
+                    https://idp.example.com
+                </saml2:Issuer>
+                <saml2p:Status>
+                    <saml2p:StatusCode Value=""urn:oasis:names:tc:SAML:2.0:status:Success"" />
+                </saml2p:Status>
+                <saml2:Assertion
+                Version=""2.0"" ID=""" + MethodBase.GetCurrentMethod().Name + @"_Assertion""
+                IssueInstant=""2013-09-25T00:00:00Z"">
+                    <saml2:Issuer>https://idp.example.com</saml2:Issuer>
+                    <saml2:Subject>
+                        <saml2:NameID>SomeUser</saml2:NameID>
+                        <saml2:SubjectConfirmation Method=""urn:oasis:names:tc:SAML:2.0:cm:bearer"" />
+                    </saml2:Subject>
+                    <saml2:Conditions NotOnOrAfter=""2100-01-01T00:00:00Z"" />
+                </saml2:Assertion>
+            </saml2p:Response>";
+
+            var formValue = Convert.ToBase64String(Encoding.UTF8.GetBytes(
+                SignedXmlHelper.SignXml(response)));
+
+            var r = new HttpRequestData(
+                "POST",
+                new Uri("http://localhost"),
+                "/ModulePath",
+                new KeyValuePair<string, string[]>[]
+                {
+                    new KeyValuePair<string, string[]>("SAMLResponse", new string[] { formValue })
+                },
+                new StoredRequestState(new EntityId("https://idp.example.com"), null, new Saml2Id("InResponseToId"), null));
+
+            var options = StubFactory.CreateOptions();
+            ((SPOptions)options.SPOptions).ReturnUrl = null;
+
+            new AcsCommand().Invoking(a => a.Run(r, options))
+                .ShouldThrow<ConfigurationErrorsException>().WithMessage(AcsCommand.SpInitiatedMissingReturnUrl);
         }
     }
 }

@@ -26,20 +26,15 @@ namespace Kentor.AuthServices.Tests.WebSso
         [TestMethod]
         public void SignInCommand_Run_ReturnsAuthnRequestForDefaultIdp()
         {
-            var defaultDestination = Options.FromConfiguration.IdentityProviders.Default.SingleSignOnServiceUrl;
+            var idp = Options.FromConfiguration.IdentityProviders.Default;
+            var defaultDestination = idp.SingleSignOnServiceUrl;
 
             var result = new SignInCommand().Run(
                 new HttpRequestData("GET", new Uri("http://example.com")),
                 Options.FromConfiguration);
 
-            var expected = new CommandResult()
-            {
-                HttpStatusCode = HttpStatusCode.SeeOther,
-                Cacheability = (Cacheability) HttpCacheability.NoCache,
-                Location = new Uri(defaultDestination + "?SAMLRequest=XYZ")
-            };
-
-            result.ShouldBeEquivalentTo(expected, options => options.Excluding(cr => cr.Location));
+            result.HttpStatusCode.Should().Be(HttpStatusCode.SeeOther);
+            result.Cacheability.Should().Be((Cacheability)HttpCacheability.NoCache);
             result.Location.Host.Should().Be(defaultDestination.Host);
 
             var queries = HttpUtility.ParseQueryString(result.Location.Query);
@@ -56,15 +51,49 @@ namespace Kentor.AuthServices.Tests.WebSso
 
             var httpRequest = new HttpRequestData("GET", new Uri("http://localhost/signin?ReturnUrl=%2FReturn.aspx"));
 
-            var subject = new SignInCommand().Run(httpRequest, Options.FromConfiguration);
+            var actual = new SignInCommand().Run(httpRequest, Options.FromConfiguration);
 
-            var idp = Options.FromConfiguration.IdentityProviders.Default;
-            var relayState = HttpUtility.ParseQueryString(subject.Location.Query)["RelayState"];
+            actual.RequestState.ReturnUrl.Should().Be("http://localhost/Return.aspx");
+        }
 
-            StoredRequestState storedAuthnData;
-            PendingAuthnRequests.TryRemove(relayState, out storedAuthnData);
+        [TestMethod]
+        public void SignInCommand_Run_MapsReturnUrl_UsingPublicOrigin_AbsolutePath()
+        {
+            var defaultDestination = Options.FromConfiguration.IdentityProviders.Default.SingleSignOnServiceUrl;
 
-            storedAuthnData.ReturnUrl.Should().Be("http://localhost/Return.aspx");
+            var httpRequest = new HttpRequestData(
+                "GET",
+                new Uri("http://localhost/localpath/signin?ReturnUrl=%2FReturn.aspx"),
+                "/localpath",
+                null,
+                null);
+
+            var options = Options.FromConfiguration;
+            ((SPOptions)options.SPOptions).PublicOrigin = new Uri("https://externalhost/path/");
+
+            var actual = new SignInCommand().Run(httpRequest, options);
+
+            actual.RequestState.ReturnUrl.Should().Be("https://externalhost/path/Return.aspx");
+        }
+
+        [TestMethod]
+        public void SignInCommand_Run_MapsReturnUrl_UsingPublicOrigin_RelativePath()
+        {
+            var defaultDestination = Options.FromConfiguration.IdentityProviders.Default.SingleSignOnServiceUrl;
+
+            var httpRequest = new HttpRequestData(
+                "GET",
+                new Uri("http://localhost/localpath/account/signin?ReturnUrl=Return.aspx"),
+                "/localpath",
+                null,
+                null);
+
+            var options = Options.FromConfiguration;
+            ((SPOptions)options.SPOptions).PublicOrigin = new Uri("https://externalhost/path/");
+
+            var actual = new SignInCommand().Run(httpRequest, options);
+
+            actual.RequestState.ReturnUrl.Should().Be("https://externalhost/path/account/Return.aspx");
         }
 
         [TestMethod]

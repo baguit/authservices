@@ -67,7 +67,7 @@ namespace Kentor.AuthServices.WebSso
             string returnPath,
             HttpRequestData request,
             IOptions options,
-            object relayData)
+            IDictionary<string, string> relayData)
         {
             if(options == null)
             {
@@ -97,12 +97,23 @@ namespace Kentor.AuthServices.WebSso
             Uri returnUrl = null;
             if (!string.IsNullOrEmpty(returnPath))
             {
-                Uri.TryCreate(request.Url, returnPath, out returnUrl);
+                var appRelativeUrl = request.Url.AbsolutePath.Substring(
+                    request.ApplicationUrl.AbsolutePath.Length).TrimStart('/');
+
+                returnUrl = returnPath[0] == '/'
+                    ? new Uri(urls.ApplicationUrl, returnPath.TrimStart('/'))
+                    : new Uri(new Uri(urls.ApplicationUrl, appRelativeUrl), returnPath);
             }
 
-            var authnRequest = idp.CreateAuthenticateRequest(returnUrl, urls, relayData);
+            var authnRequest = idp.CreateAuthenticateRequest(urls);
 
-            return idp.Bind(authnRequest);
+            var commandResult = idp.Bind(authnRequest);
+
+            commandResult.RequestState = new StoredRequestState(
+                idp.EntityId, returnUrl, authnRequest.Id, relayData);
+            commandResult.SetCookieName = "Kentor." + authnRequest.RelayState;
+
+            return commandResult;
         }
 
         private static CommandResult RedirectToDiscoveryService(
